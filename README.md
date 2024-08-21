@@ -21,6 +21,6 @@ Before running the script, ensure you have the following installed (instructions
 1. Clone the repository:
 
    ```bash
-   git clone https://github.com/yourusername/UNC-Dept-Email-Push.git
+   git clone https://github.com/rmharp/UNC-Dept-Email-Push.git
    cd UNC-Dept-Email-Push
    ```

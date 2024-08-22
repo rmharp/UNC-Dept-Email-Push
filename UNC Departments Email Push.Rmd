@@ -176,7 +176,7 @@ if (temp_email != "") {
       gm_subject(subject) %>%
       # Specifies local file(s) to attach to the email
       gm_attach_file("", type = "image/png", id = "YourImageContentID") %>%
-      gm_attach_file("/Users/riley/Downloads/Ethics of AI Panel.pdf", type = "application/pdf", id = "YourImageContentID1") %>%
+      gm_attach_file("", type = "application/pdf", id = "YourImageContentID1") %>%
       # Specifies content of the email
       gm_html_body(email_body)
     gm_send_message(email)

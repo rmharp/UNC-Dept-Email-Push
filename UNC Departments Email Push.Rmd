@@ -106,7 +106,7 @@ check_for_sending_limit_reached <- function() {
 #start_index <- 120
 
 # If you would like to check the formatting of the email before sending out then type your email here and a single email will be sent directly to you for testing purposes. Set temp_email to empty string once you're satisfied and would like to disseminate the message.
-temp_email <- "riley.harper@unc.edu"
+temp_email <- ""
 
 # Specify constants such as the email you are sending from, your name, subject line, and the email the recipient can respond to with questions
 send <- ""
@@ -159,7 +159,7 @@ if (temp_email != "") {
     gm_html_body(email_body)
   gm_send_message(email)
 } else {
-  for(i in start_index:1) {
+  for(i in start_index:nrow(table_grouped)) {
     if (check_for_sending_limit_reached()) {
       print("Limit for sending mail has been reached. Halting email sending.")
       break # Stop the loop if a sending limit is reached

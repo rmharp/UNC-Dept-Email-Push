@@ -5,7 +5,7 @@ date: "`r Sys.Date()`"
 ---
 
 ```{r setup, include=FALSE}
-### If first time using some of the packages then run once to install required packages then run again for the library
+### If first time using some of the packages then required packages will be installed before being loaded via library, otherwise installed packages will be loaded via require
 
 if(!require(dplyr)) {install.packages("dplyr"); library(dplyr)}
 if(!require(tidyverse)) {install.packages("tidyverse"); library(tidyverse)}
@@ -15,6 +15,12 @@ if(!require(netstat)) {install.packages("netstat"); library(netstat)}
 if(!require(xml2)) {install.packages("xml2"); library(xml2)}
 if(!require(purrr)) {install.packages("purrr"); library(purrr)}
 if (!require(gmailr)) {install.packages("gmailr"); library(gmailr)}
+if (!require(shiny)) {install.packages("shiny"); library(shiny)}
+if (!require(remotes)) {install.packages("remotes"); library(remotes)}
+if (!require(SummeRnote)) {
+  remotes::install_github("LukasK13/SummeRnote")
+  library(SummeRnote)
+}
 ```
 
 ```{r}
@@ -72,6 +78,54 @@ filtered_table <- final_table %>%
 ```
 
 ```{r}
+### Optional code block to be used if the user would prefer a WYSIWYG style editor. If you'd prefer to use html directly there's space below to include this and running this code block is not necessary
+
+##It is not recommended to embed images within the WYSIWYG editor. Although, it sometimes can work it is prone to error and it is much simpler to use the html code generated from this editor to paste into the below email_body variable and then to manually add images by cid as is done in the example below. This will also work better with the gmailr package which is being used to send the emails
+
+# UI for the Shiny app
+ui <- fluidPage(
+  titlePanel("Email Body Input"),
+  sidebarLayout(
+    sidebarPanel(
+      summernoteInput("html_message", "Compose your email:", height = "400px"),
+      actionButton("submit", "Submit")
+    ),
+    mainPanel(
+      htmlOutput("html_preview"),
+      verbatimTextOutput("email_body_code")
+    )
+  ),
+  # JavaScript to set Times New Roman as the default font on editor load
+  tags$script(HTML("
+    $(document).on('shiny:sessioninitialized', function() {
+      $('#html_message').summernote('editor.pasteHTML', '<p style=\"font-family: Times New Roman;\"><br></p>');
+    });
+  "))
+)
+
+# Server logic for Shiny app
+server <- function(input, output, session) {
+  observeEvent(input$submit, {
+    # Render the HTML message preview
+    output$html_preview <- renderUI({
+      HTML(input$html_message)
+    })
+    
+    # Show the HTML message as raw code for copy-pasting or further usage
+    output$email_body_code <- renderText({
+      input$html_message
+    })
+    
+    # Assign the input to the email body
+    email_body <<- input$html_message
+  })
+}
+
+# Run the Shiny app
+shinyApp(ui, server)
+```
+
+```{r}
 ### Specify the email you would like to send at the end then run the code chunk chunk to send email to all of the UNC departments
 
 ## One-time setup for gmailR
@@ -115,33 +169,44 @@ my_email <- ""
 subject <- "Invitation to ..."
 start_index <- 1
 
-# Specify the body of the email to be sent
-email_body <- paste0("<html>
-    <head>
-    <style>
-    body { 
-      font-family: 'Times New Roman', Times, serif; 
-      font-size: 12pt; 
-      color: black; 
-    }
-    </style>
-    </head>
-    <body>
-      <p>Good Evening,</p>
-    
-    <p>My name is ", my_name, ", and I am...</p>
-    
-    <p>Please see the attached pdf flyer for event details and feel free to disseminate to faculty and students so they may RSVP for the event. If you have any questions or would like further information, feel free to contact me at ", my_email, ". We appreciate your support in promoting this event.</p>
-    
-      <p>Best,</p>
-      <p><strong>", my_name, "</strong><br>
-      Director of ...<br>
-      <p></p>
-      <img src='cid:YourImageContentID' width='150'><br>
-      <strong>Club Name</strong><br>
-      <strong>Primary Email:</strong> <a href='mailto:", my_email ,"'>", my_email,"</a><br>
-    </body>
-    </html>")
+collect_body <- readline('Type "Y" if you would like to input the body of your email in html rather than using the \nWYSIWYG editor above.\n\n')
+
+# Specifies the body of the email to be sent
+
+if (collect_body == "Y") {
+  email_body <- paste0("<html>
+      <head>
+      <style>
+      body { 
+        font-family: 'Times New Roman', Times, serif; 
+        font-size: 12pt; 
+        color: black; 
+      }
+      </style>
+      </head>
+      <body>
+        <p>Good Evening,</p>
+      
+      <p>My name is ", my_name, ", and I am...</p>
+      
+      <p>Please see the attached pdf flyer for event details and feel free to disseminate to faculty and students so they may RSVP for the event. If you have any questions or would like further information, feel free to contact me at ", my_email, ". We appreciate your support in promoting this event.</p>
+      
+        <p>Best,</p>
+        <p><strong>", my_name, "</strong><br>
+        Director of ...<br>
+        <p></p>
+        <img src='cid:YourImageContentID' width='150'><br>
+        <strong>Club Name</strong><br>
+        <strong>Primary Email:</strong> <a href='mailto:", my_email ,"'>", my_email,"</a><br>
+      </body>
+      </html>")
+} else {
+  if (!exists("email_body") || email_body == "") {
+    stop("You have not specified a body for your email. Please use either the WYSIWYG editor or the html editor depending on your preference.")
+  } else {
+    cat(paste0("You have written the following email,\n\n", email_body))
+  }
+}
 
 if (temp_email != "") {
   i <- 1

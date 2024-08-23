@@ -1,0 +1,251 @@
+#' ---
+#' title: "UNC Departments Email Push"
+#' output: html_document
+#' date: "`r Sys.Date()`"
+#' ---
+#' 
+## ----setup, include=FALSE-----------------------------------------------------------------
+### If first time using some of the packages then required packages will be installed before being loaded via library, otherwise installed packages will be loaded via require
+
+if(!require(dplyr)) {install.packages("dplyr"); library(dplyr)}
+if(!require(tidyverse)) {install.packages("tidyverse"); library(tidyverse)}
+if(!require(rvest)) {install.packages("rvest"); library(rvest)}
+if(!require(wdman)) {install.packages("wdman"); library(wdman)}
+if(!require(netstat)) {install.packages("netstat"); library(netstat)}
+if(!require(xml2)) {install.packages("xml2"); library(xml2)}
+if(!require(purrr)) {install.packages("purrr"); library(purrr)}
+if (!require(gmailr)) {install.packages("gmailr"); library(gmailr)}
+if (!require(shiny)) {install.packages("shiny"); library(shiny)}
+if (!require(remotes)) {install.packages("remotes"); library(remotes)}
+if (!require(SummeRnote)) {
+  remotes::install_github("LukasK13/SummeRnote")
+  library(SummeRnote)
+}
+
+#' 
+## -----------------------------------------------------------------------------------------
+### Run code chunk to collect latest Director of Undergraduate Studies and Student Services Manager Contact Information in a dataframe
+
+page <- read_html("https://curricula.unc.edu/departmental-contacts/?wpv_aux_current_post_id=191&wpv_aux_parent_post_id=191&wpv_view_count=645")
+rows <- page %>% html_nodes("table tr")
+extracted_data <- lapply(rows, function(row) {
+  # Initialize placeholders for department, role
+  department <- NA
+  role <- NA
+  
+  # Extract text from all cells (assuming the first cell is department, the second is role)
+  cells <- row %>% html_nodes("td") %>% html_text(trim = TRUE)
+  if (length(cells) >= 1) {
+    department <- cells[1]
+  }
+  if (length(cells) >= 2) {
+    role <- cells[2]
+  }
+  
+  # Extract and split email addresses
+  email_links <- row %>% html_nodes("a[href^='mailto:']") %>% html_attr("href")
+  emails <- if (length(email_links) > 0) {
+    unlist(lapply(email_links, function(link) {
+      # Remove 'mailto:' and then split by ';'
+      split_emails <- strsplit(gsub("mailto:", "", link), ";\\s*")
+      unlist(split_emails) # Ensure split_emails is flattened into a single vector
+    }))
+  } else {
+    character(0) # Ensure this is an empty character vector if no emails
+  }
+  
+  list(Department = department, Role = role, Emails = emails)
+})
+
+final_table <- data.frame(Department = character(), Role = character(), Email = character(), stringsAsFactors = FALSE)
+
+# Populate final_table, ensuring multiple emails result in duplicated rows
+for (row in extracted_data) {
+  if (length(row$Emails) > 0) {
+    for (email in row$Emails) {
+      # Create a new row for each email
+      new_row <- data.frame(Department = row$Department, Role = row$Role, Email = email, stringsAsFactors = FALSE)
+      final_table <- rbind(final_table, new_row)
+    }
+  } else {
+    # If no emails, add the row with NA for Email
+    new_row <- data.frame(Department = row$Department, Role = row$Role, Email = NA, stringsAsFactors = FALSE)
+    final_table <- rbind(final_table, new_row)
+  }
+}
+filtered_table <- final_table %>%
+  filter(str_detect(Role, "DUS") | str_detect(Role, "SSM"))
+
+#' 
+## -----------------------------------------------------------------------------------------
+### Optional code block to be used if the user would prefer a WYSIWYG style editor. If you'd prefer to use html directly there's space below to include this and running this code block is not necessary
+
+##It is not recommended to embed images within the WYSIWYG editor. Although, it sometimes can work it is prone to error and it is much simpler to use the html code generated from this editor to paste into the below email_body variable and then to manually add images by cid as is done in the example below. This will also work better with the gmailr package which is being used to send the emails
+
+# UI for the Shiny app
+ui <- fluidPage(
+  titlePanel("Email Body Input"),
+  sidebarLayout(
+    sidebarPanel(
+      summernoteInput("html_message", "Compose your email:", height = "400px"),
+      actionButton("submit", "Submit")
+    ),
+    mainPanel(
+      htmlOutput("html_preview"),
+      verbatimTextOutput("email_body_code")
+    )
+  ),
+  # JavaScript to set Times New Roman as the default font on editor load
+  tags$script(HTML("
+    $(document).on('shiny:sessioninitialized', function() {
+      $('#html_message').summernote('editor.pasteHTML', '<p style=\"font-family: Times New Roman;\"><br></p>');
+    });
+  "))
+)
+
+# Server logic for Shiny app
+server <- function(input, output, session) {
+  observeEvent(input$submit, {
+    # Render the HTML message preview
+    output$html_preview <- renderUI({
+      HTML(input$html_message)
+    })
+    
+    # Show the HTML message as raw code for copy-pasting or further usage
+    output$email_body_code <- renderText({
+      input$html_message
+    })
+    
+    # Assign the input to the email body
+    email_body <<- input$html_message
+  })
+}
+
+# Run the Shiny app
+shinyApp(ui, server)
+
+#' 
+## -----------------------------------------------------------------------------------------
+### Specify the email you would like to send at the end then run the code chunk chunk to send email to all of the UNC departments
+
+## One-time setup for gmailR
+# Set up the Gmail API by visiting https://console.cloud.google.com/ on the email you'd like to send from
+# Search for "Gmail API"
+# Click Enable then go through the steps to set up a desktop app
+# Download the json and specify the local file path as a string below in gm_auth_configure
+# Enter the OAuth consent information for the email you'd like to send from
+gm_auth_configure(path = "")
+gm_auth(email = T, cache = ".secret")
+
+table_grouped <- filtered_table %>% 
+  filter(!is.na(Email)) %>%
+  group_by(Department) %>% 
+  summarise(Email = paste(Email, collapse = ", "))
+
+# Function to check for sending limit reached
+check_for_sending_limit_reached <- function() {
+  my_messages <- gm_threads(num_results = 1) # Adjust num_results as needed
+  for (msg_id in gm_id(my_messages)) {
+    message <- gm_message(msg_id)
+    if (any(grepl("You have reached a limit for sending mail. Your message was not sent.", gm_body(message), fixed = TRUE))) {
+      return(TRUE) # Sending limit indication found
+    }
+  }
+  return(FALSE) # No sending limit indication found
+}
+
+# To specify start index by department name
+#start_index <- match("Sociology", filtered_table$Department)
+# To specify start index by row
+#start_index <- 120
+
+# If you would like to check the formatting of the email before sending out then type your email here and a single email will be sent directly to you for testing purposes. Set temp_email to empty string once you're satisfied and would like to disseminate the message.
+temp_email <- ""
+
+# Specify constants such as the email you are sending from, your name, subject line, and the email the recipient can respond to with questions
+send <- ""
+my_name <- ""
+my_email <- ""
+subject <- "Invitation to ..."
+start_index <- 1
+
+collect_body <- readline('Type "Y" if you would like to input the body of your email in html rather than using the \nWYSIWYG editor above.\n\n')
+
+# Specifies the body of the email to be sent
+
+if (collect_body == "Y") {
+  email_body <- paste0("<html>
+      <head>
+      <style>
+      body { 
+        font-family: 'Times New Roman', Times, serif; 
+        font-size: 12pt; 
+        color: black; 
+      }
+      </style>
+      </head>
+      <body>
+        <p>Good Evening,</p>
+      
+      <p>My name is ", my_name, ", and I am...</p>
+      
+      <p>Please see the attached pdf flyer for event details and feel free to disseminate to faculty and students so they may RSVP for the event. If you have any questions or would like further information, feel free to contact me at ", my_email, ". We appreciate your support in promoting this event.</p>
+      
+        <p>Best,</p>
+        <p><strong>", my_name, "</strong><br>
+        Director of ...<br>
+        <p></p>
+        <img src='cid:YourImageContentID' width='150'><br>
+        <strong>Club Name</strong><br>
+        <strong>Primary Email:</strong> <a href='mailto:", my_email ,"'>", my_email,"</a><br>
+      </body>
+      </html>")
+} else {
+  if (!exists("email_body") || email_body == "") {
+    stop("You have not specified a body for your email. Please use either the WYSIWYG editor or the html editor depending on your preference.")
+  } else {
+    cat(paste0("You have written the following email,\n\n", email_body))
+  }
+}
+
+if (temp_email != "") {
+  i <- 1
+  email <- gm_mime() %>%
+    # Specifies which email address to send to
+    gm_to(temp_email) %>%
+    # Specifies which email address to send from
+    gm_from(send) %>%
+    # Specifies email subject line
+    gm_subject(subject) %>%
+    # Specifies local file(s) to attach to the email
+    gm_attach_file("", type = "image/png", id = "YourImageContentID") %>%
+    gm_attach_file("", type = "application/pdf", id = "YourImageContentID1") %>%
+    # Specifies content of the email
+    gm_html_body(email_body)
+  gm_send_message(email)
+} else {
+  for(i in start_index:nrow(table_grouped)) {
+    if (check_for_sending_limit_reached()) {
+      print("Limit for sending mail has been reached. Halting email sending.")
+      break # Stop the loop if a sending limit is reached
+    }
+    to <- table_grouped$Email[i]
+    department <- table_grouped$Department[i]
+      
+    email <- gm_mime() %>%
+      # Specifies which email address to send to
+      gm_to(to) %>%
+      # Specifies which email address to send from
+      gm_from(send) %>%
+      # Specifies email subject line
+      gm_subject(subject) %>%
+      # Specifies local file(s) to attach to the email
+      gm_attach_file("", type = "image/png", id = "YourImageContentID") %>%
+      gm_attach_file("", type = "application/pdf", id = "YourImageContentID1") %>%
+      # Specifies content of the email
+      gm_html_body(email_body)
+    gm_send_message(email)
+  }
+}
+print(paste("Last emailed group index:", i))
+

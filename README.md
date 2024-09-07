@@ -5,6 +5,7 @@ UNC Dept Email Push is an R script designed to automate the collection of depart
 ## Features
 - Automatically scrapes the latest contact information from the UNC Departmental Contacts webpage.
 - Uses Gmail to send personalized emails to the extracted contacts.
+- Uses HeelMail to send personalized emails to the extracted contacts.
 
 ## Getting Started
 
@@ -14,7 +15,7 @@ Before running the script, ensure you have the following installed (instructions
 
 - R (version 4.0 or higher)
 - The following R packages: `dplyr`, `tidyverse`, `rvest`, `wdman`, `netstat`, `xml2`, `purrr`, and `gmailr`
-- A Gmail account with an app password configured for third-party apps (as direct login using your regular password may not be supported).
+- A Gmail account with an app password configured for third-party apps (as direct login using your regular password may not be supported) or a HeelMail account.
 
 ### Installation
 

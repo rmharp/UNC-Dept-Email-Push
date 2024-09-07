@@ -14,7 +14,7 @@ UNC Dept Email Push is an R script designed to automate the collection of depart
 Before running the script, ensure you have the following installed (instructions are provided in the rmd file for setting up the Gmail API):
 
 - R (version 4.0 or higher)
-- The following R packages: `dplyr`, `tidyverse`, `rvest`, `wdman`, `netstat`, `xml2`, `purrr`, `selenium`, and `gmailr`
+- The following R packages: `dplyr`, `tidyverse`, `rvest`, `wdman`, `netstat`, `xml2`, `purrr`, `RSelenium`, and `gmailr`
 - A Gmail account with an app password configured for third-party apps (as direct login using your regular password may not be supported) or a HeelMail account.
 
 ### Installation
